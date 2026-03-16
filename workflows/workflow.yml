@@ -1,0 +1,16 @@
+workflow_name: dev
+
+services:
+  redis:
+    command: redis-server
+    detached: false
+    port: 6379
+
+  backend:
+    command: uv
+    args:
+      - run
+      - main.py
+    path: ~/command_orchestrator
+    detached: true
+    depends_on: [redis]
