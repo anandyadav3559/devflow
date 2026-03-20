@@ -12,7 +12,7 @@ import (
 // terminal emulator to open a new window with a given title and command.
 type terminalDef struct {
 	bin       string
-	buildArgs func(title string, cmd []string, dir string) []string
+	buildArgs func(title string, cmd []string, dir string, vars map[string]string) []string
 }
 
 // supportedTerminals lists known terminal emulators in preference order.
@@ -20,82 +20,103 @@ type terminalDef struct {
 var supportedTerminals = []terminalDef{
 	{
 		bin: "gnome-terminal",
-		buildArgs: func(title string, cmd []string, dir string) []string {
+		buildArgs: func(title string, cmd []string, dir string, vars map[string]string) []string {
 			args := []string{"--title=" + title}
 			if dir != "" {
 				args = append(args, "--working-directory="+dir)
 			}
 			args = append(args, "--")
-			return append(args, keepOpenShell(cmd, "")...)
+			return append(args, keepOpenShell(cmd, "", vars)...)
 		},
 	},
 	{
 		bin: "kgx", // GNOME Console (default on Fedora 40+)
-		buildArgs: func(title string, cmd []string, dir string) []string {
-			return append([]string{"--title=" + title, "--"}, keepOpenShell(cmd, dir)...)
+		buildArgs: func(title string, cmd []string, dir string, vars map[string]string) []string {
+			return append([]string{"--title=" + title, "--"}, keepOpenShell(cmd, dir, vars)...)
 		},
 	},
 	{
 		bin: "kitty",
-		buildArgs: func(title string, cmd []string, dir string) []string {
+		buildArgs: func(title string, cmd []string, dir string, vars map[string]string) []string {
 			// --hold keeps the window open natively after the process exits
 			args := []string{"--hold", "--title", title}
 			if dir != "" {
 				args = append(args, "--directory", dir)
 			}
-			return append(args, cmd...)
+			// Kitty doesn't have a simple way to inject env via CLI, so we use shell wrapper
+			return append(args, keepOpenShell(cmd, "", vars)...)
 		},
 	},
 	{
 		bin: "alacritty",
-		buildArgs: func(title string, cmd []string, dir string) []string {
+		buildArgs: func(title string, cmd []string, dir string, vars map[string]string) []string {
 			args := []string{"--title", title}
 			if dir != "" {
 				args = append(args, "--working-directory", dir)
 			}
-			return append(append(args, "-e"), keepOpenShell(cmd, "")...)
+			return append(append(args, "-e"), keepOpenShell(cmd, "", vars)...)
 		},
 	},
 	{
 		bin: "xfce4-terminal",
-		buildArgs: func(title string, cmd []string, dir string) []string {
+		buildArgs: func(title string, cmd []string, dir string, vars map[string]string) []string {
 			args := []string{"--title=" + title}
 			if dir != "" {
 				args = append(args, "--working-directory="+dir)
 			}
-			return append(append(args, "-x"), keepOpenShell(cmd, "")...)
+			return append(append(args, "-x"), keepOpenShell(cmd, "", vars)...)
 		},
 	},
 	{
 		bin: "konsole", // KDE
-		buildArgs: func(title string, cmd []string, dir string) []string {
+		buildArgs: func(title string, cmd []string, dir string, vars map[string]string) []string {
 			args := []string{"--title", title}
 			if dir != "" {
 				args = append(args, "--workdir", dir)
 			}
-			return append(append(args, "-e"), cmd...)
+			return append(append(args, "-e"), keepOpenShell(cmd, "", vars)...)
 		},
 	},
 	{
 		bin: "xterm",
-		buildArgs: func(title string, cmd []string, dir string) []string {
-			if dir != "" {
-				shell := strings.Join(cmd, " ")
-				return []string{"-title", title, "-e", "sh", "-c",
-					fmt.Sprintf("cd %q && exec %s", dir, shell)}
-			}
-			return append([]string{"-title", title, "-e"}, cmd...)
+		buildArgs: func(title string, cmd []string, dir string, vars map[string]string) []string {
+			return append([]string{"-title", title, "-e"}, keepOpenShell(cmd, dir, vars)...)
 		},
 	},
 }
 
+// shellQuote safely quotes a string for Unix shell execution
+func shellQuote(s string) string {
+	if s == "" {
+		return "''"
+	}
+	if !strings.ContainsAny(s, " \t\n\r$&*(){}[]|;'<>?`~\\\"") {
+		return s
+	}
+	return fmt.Sprintf("%q", s)
+}
+
 // keepOpenShell wraps a command in a shell that waits for Enter after the
 // process exits, keeping the terminal window visible for the user to read output.
-func keepOpenShell(cmd []string, dir string) []string {
-	script := strings.Join(cmd, " ") +
+func keepOpenShell(cmd []string, dir string, vars map[string]string) []string {
+	var envParts []string
+	for k, v := range vars {
+		envParts = append(envParts, fmt.Sprintf("export %s=%s", k, shellQuote(v)))
+	}
+	envPrefix := ""
+	if len(envParts) > 0 {
+		envPrefix = strings.Join(envParts, " && ") + " && "
+	}
+
+	var quotedCmd []string
+	for _, arg := range cmd {
+		quotedCmd = append(quotedCmd, shellQuote(arg))
+	}
+
+	script := envPrefix + strings.Join(quotedCmd, " ") +
 		`; echo; echo "--- process exited (press Enter to close) ---"; read`
 	if dir != "" {
-		script = fmt.Sprintf("cd %q && ", dir) + script
+		script = fmt.Sprintf("cd %s && ", shellQuote(dir)) + script
 	}
 	return []string{"sh", "-c", script}
 }
@@ -125,19 +146,20 @@ func detectTerminal() *terminalDef {
 
 // openInNewTerminal launches cmd in a new terminal window with the given title
 // and optional working directory.
-func openInNewTerminal(title string, cmd []string, dir string) error {
+func openInNewTerminal(title string, cmd []string, dir string, vars map[string]string) (*exec.Cmd, error) {
 	t := detectTerminal()
 	if t == nil {
-		return fmt.Errorf("no terminal emulator found " +
+		return nil, fmt.Errorf("no terminal emulator found " +
 			"(set $TERMINAL, or install: gnome-terminal, kgx, kitty, alacritty, xfce4-terminal, konsole, xterm)")
 	}
 
-	args := t.buildArgs(title, cmd, dir)
+	args := t.buildArgs(title, cmd, dir, vars)
 	c := exec.Command(t.bin, args...)
 	c.Stdout = os.Stdout
 	c.Stderr = os.Stderr
 	fmt.Printf("  → using %s\n", t.bin)
-	return c.Start()
+	err := c.Start()
+	return c, err
 }
 
 // expandPath expands a leading ~ to the user's home directory.

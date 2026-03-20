@@ -1,16 +1,38 @@
-workflow_name: dev
+workflow_name: bio_geo_guesser_dev
 
 services:
-  redis:
-    command: redis-server
-    detached: false
-    port: 6379
+  db_stack:
+    command: docker
+    args:
+      - compose
+      - up
+    path: ~/geoguesser-v2/extraction
+    on_close:
+      command: docker
+      args:
+        - compose
+        - down
 
   backend:
     command: uv
     args:
       - run
-      - main.py
-    path: ~/command_orchestrator
-    detached: true
-    depends_on: [redis]
+      - manage.py
+      - runserver
+    path: ~/geoguesser-v2/backend
+    depends_on: ["db_stack"]
+    on_close:
+      - command: echo "Shutting down backend..."
+
+  frontend:
+    command: npm
+    args:
+      - run
+      - dev
+    path: ~/geoguesser-v2/frontend/frontend
+    depends_on: ["backend"]
+    on_close:
+      - command: echo "Shutting down frontend..."
+
+on_close:
+  - command: echo "All individual services have been cleaned up! Global cleanup finished."

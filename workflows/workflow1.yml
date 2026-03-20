@@ -1,0 +1,31 @@
+workflow_name: Advanced Orchestration
+services:
+  database:
+    command: echo "Starting Postgres..."
+    detached: true
+
+  cache:
+    command: echo "Starting Redis..."
+    detached: true
+
+  backend:
+    command: echo
+    args: ["Launching API Server with", "custom args..."]
+    vars:
+      API_ENV: "production"
+      DEBUG: "true"
+    depends_on: ["database", "cache"]
+
+  frontend:
+    command: echo
+    args: ["Starting Web UI on port 3000"]
+    depends_on: ["backend"]
+    port: 3000
+
+  monitoring:
+    command: echo
+    args: ["Starting Prometheus..."]
+    vars:
+      RETENTION_DAYS: "15"
+    detached: true
+    depends_on: ["backend"]

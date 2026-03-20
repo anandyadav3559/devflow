@@ -1,7 +1,21 @@
 package main
 
-import "github.com/anandyadav3559/devflow/services"
+import (
+	"flag"
+	"fmt"
+	"os"
+
+	"github.com/anandyadav3559/devflow/services"
+)
 
 func main() {
-	services.Start("workflow.yml")
+	workflowFile := flag.String("f", "workflows/workflow.yml", "Path to the workflow YAML file")
+	flag.Parse()
+
+	if _, err := os.Stat(*workflowFile); os.IsNotExist(err) {
+		fmt.Printf("Error: Workflow file %q not found.\n", *workflowFile)
+		os.Exit(1)
+	}
+
+	services.Start(*workflowFile)
 }
