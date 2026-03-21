@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/anandyadav3559/devflow/services"
+	"github.com/anandyadav3559/devflow/services/scheduler"
 )
 
 func TestOnClose(t *testing.T) {
@@ -18,7 +19,7 @@ func TestOnClose(t *testing.T) {
 			"svc1": {
 				Command: "echo",
 				Args:    []string{"svc1"},
-				OnClose: []services.CleanupCommand{
+				OnClose: services.CleanupCommands{
 					{Command: "echo", Args: []string{"cleanup-svc1"}},
 				},
 			},
@@ -26,12 +27,12 @@ func TestOnClose(t *testing.T) {
 				Command:   "echo",
 				Args:      []string{"svc2"},
 				DependsOn: []string{"svc1"},
-				OnClose: []services.CleanupCommand{
+				OnClose: services.CleanupCommands{
 					{Command: "echo", Args: []string{"cleanup-svc2"}},
 				},
 			},
 		},
-		OnClose: []services.CleanupCommand{
+		OnClose: services.CleanupCommands{
 			{Command: "echo", Args: []string{"cleanup-global"}},
 		},
 	}
@@ -45,7 +46,7 @@ func TestOnClose(t *testing.T) {
 
 	// Run cleanup directly as testing the full Start with signals is complex and brittle
 	// We want to verify the order and execution of cleanup commands.
-	services.RunCleanup(&wf, order, nil, nil, nil)
+	scheduler.RunCleanup(&wf, order, nil, nil, nil)
 
 	w.Close()
 	os.Stdout = oldStdout

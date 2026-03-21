@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/anandyadav3559/devflow/services"
+	"github.com/anandyadav3559/devflow/services/scheduler"
 )
 
 var workflowPath = flag.String("workflow", "workflows/workflow1.yml", "path to workflow file for integration test")
@@ -45,7 +46,7 @@ func TestWorkflowDependencies(t *testing.T) {
 	}
 	fmt.Println("------------------------")
 
-	order, err := services.TopoSort(wf.Services)
+	order, err := scheduler.TopoSort(wf.Services)
 	if err != nil {
 		t.Fatalf("TopoSort failed: %v", err)
 	}

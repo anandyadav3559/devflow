@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/anandyadav3559/devflow/services"
+	"github.com/anandyadav3559/devflow/services/scheduler"
 )
 
 func main() {
@@ -17,5 +17,5 @@ func main() {
 		os.Exit(1)
 	}
 
-	services.Start(*workflowFile)
+	scheduler.Start(*workflowFile)
 }

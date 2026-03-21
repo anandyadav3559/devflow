@@ -11,7 +11,7 @@ import (
 // RunService starts a service — either detached (background process) or
 // in a new terminal window, depending on the Detached flag.
 func RunService(name string, service Service) (*exec.Cmd, error) {
-	dir := expandPath(service.Path)
+	dir := ExpandPath(service.Path)
 
 	if service.Detached {
 		return runDetached(name, service, dir)

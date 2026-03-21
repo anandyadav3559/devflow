@@ -162,8 +162,8 @@ func openInNewTerminal(title string, cmd []string, dir string, vars map[string]s
 	return c, err
 }
 
-// expandPath expands a leading ~ to the user's home directory.
-func expandPath(path string) string {
+// ExpandPath expands a leading ~ to the user's home directory.
+func ExpandPath(path string) string {
 	if strings.HasPrefix(path, "~") {
 		home, err := os.UserHomeDir()
 		if err != nil {

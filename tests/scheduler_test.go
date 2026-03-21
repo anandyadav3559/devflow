@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/anandyadav3559/devflow/services"
+	"github.com/anandyadav3559/devflow/services/scheduler"
 )
 
 func TestTopoSort(t *testing.T) {
@@ -55,7 +56,7 @@ func TestTopoSort(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := services.TopoSort(tt.services)
+			got, err := scheduler.TopoSort(tt.services)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("topoSort() error = %v, wantErr %v", err, tt.wantErr)
 				return
