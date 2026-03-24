@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	internal "github.com/anandyadav3559/devflow/internal/storage"
 	"github.com/anandyadav3559/devflow/services"
 )
 
@@ -36,7 +37,7 @@ func killProcessGracefully(p *os.Process) {
 }
 
 // killDependents scans for services that depend on deadService, and conditionally stops their process.
-func killDependents(deadService string, servicesMap map[string]services.Service, runningProcs map[string]*exec.Cmd, procMu *sync.Mutex) {
+func killDependents(deadService string, servicesMap map[string]internal.Service, runningProcs map[string]*exec.Cmd, procMu *sync.Mutex) {
 	if procMu == nil || runningProcs == nil {
 		return
 	}
@@ -60,7 +61,7 @@ func killDependents(deadService string, servicesMap map[string]services.Service,
 }
 
 // runServiceCleanup executes the cleanup commands for a single service
-func runServiceCleanup(name string, svc services.Service) {
+func runServiceCleanup(name string, svc internal.Service) {
 	if len(svc.OnClose) > 0 {
 		fmt.Printf("Cleaning up service: %q\n", name)
 		for _, cmd := range svc.OnClose {
@@ -74,7 +75,7 @@ func runServiceCleanup(name string, svc services.Service) {
 }
 
 // runCleanupCommand executes a single cleanup command with a 15-second timeout
-func runCleanupCommand(c services.CleanupCommand) {
+func runCleanupCommand(c internal.CleanupCommand) {
 	cmdStr := c.Command
 	args := c.Args
 
@@ -112,7 +113,7 @@ func runCleanupCommand(c services.CleanupCommand) {
 
 // RunCleanup executes any remaining service-level cleanup in reverse order, then global cleanup.
 // It accepts a tracker map to avoid double-executing service cleanups run asynchronously.
-func RunCleanup(wf *services.Workflow, order []string, cleanedUp *sync.Map, runningProcs map[string]*exec.Cmd, procMu *sync.Mutex) {
+func RunCleanup(wf *internal.Workflow, order []string, cleanedUp *sync.Map, runningProcs map[string]*exec.Cmd, procMu *sync.Mutex) {
 	// For testing, we might pass nil, so let's default it
 	if cleanedUp == nil {
 		cleanedUp = &sync.Map{}

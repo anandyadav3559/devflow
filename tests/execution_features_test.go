@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	internal "github.com/anandyadav3559/devflow/internal/storage"
 	"github.com/anandyadav3559/devflow/services"
 )
 
@@ -22,7 +23,7 @@ echo "VAR1=$TEST_VAR"`
 		os.WriteFile(scriptPath, []byte(script), 0755)
 		defer os.Remove(scriptPath)
 
-		service := services.Service{
+		service := internal.Service{
 			Command:  "./" + scriptPath,
 			Args:     []string{"hello-arg"},
 			Vars:     map[string]string{"TEST_VAR": "world-var"},
@@ -65,7 +66,7 @@ echo "VAR1=$TEST_VAR"`
 		}
 		defer ln.Close()
 
-		service := services.Service{
+		service := internal.Service{
 			Command:  "echo",
 			Args:     []string{"should be skipped"},
 			Port:     port,

@@ -4,20 +4,20 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/anandyadav3559/devflow/services"
+	internal "github.com/anandyadav3559/devflow/internal/storage"
 	"github.com/anandyadav3559/devflow/services/scheduler"
 )
 
 func TestTopoSort(t *testing.T) {
 	tests := []struct {
 		name     string
-		services map[string]services.Service
+		services map[string]internal.Service
 		want     []string
 		wantErr  bool
 	}{
 		{
 			name: "simple linear dependency",
-			services: map[string]services.Service{
+			services: map[string]internal.Service{
 				"s1": {Command: "echo"},
 				"s2": {Command: "echo", DependsOn: []string{"s1"}},
 			},
@@ -26,7 +26,7 @@ func TestTopoSort(t *testing.T) {
 		},
 		{
 			name: "multiple dependencies",
-			services: map[string]services.Service{
+			services: map[string]internal.Service{
 				"s1": {Command: "echo"},
 				"s2": {Command: "echo"},
 				"s3": {Command: "echo", DependsOn: []string{"s1", "s2"}},
@@ -37,7 +37,7 @@ func TestTopoSort(t *testing.T) {
 		},
 		{
 			name: "circular dependency",
-			services: map[string]services.Service{
+			services: map[string]internal.Service{
 				"s1": {Command: "echo", DependsOn: []string{"s2"}},
 				"s2": {Command: "echo", DependsOn: []string{"s1"}},
 			},
@@ -46,7 +46,7 @@ func TestTopoSort(t *testing.T) {
 		},
 		{
 			name: "unknown dependency",
-			services: map[string]services.Service{
+			services: map[string]internal.Service{
 				"s1": {Command: "echo", DependsOn: []string{"unknown"}},
 			},
 			want:    nil,

@@ -7,19 +7,19 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/anandyadav3559/devflow/services"
+	internal "github.com/anandyadav3559/devflow/internal/storage"
 	"github.com/anandyadav3559/devflow/services/scheduler"
 )
 
 func TestOnClose(t *testing.T) {
 	// Create a dummy workflow
-	wf := services.Workflow{
+	wf := internal.Workflow{
 		WorkflowName: "Test OnClose",
-		Services: map[string]services.Service{
+		Services: map[string]internal.Service{
 			"svc1": {
 				Command: "echo",
 				Args:    []string{"svc1"},
-				OnClose: services.CleanupCommands{
+				OnClose: internal.CleanupCommands{
 					{Command: "echo", Args: []string{"cleanup-svc1"}},
 				},
 			},
@@ -27,12 +27,12 @@ func TestOnClose(t *testing.T) {
 				Command:   "echo",
 				Args:      []string{"svc2"},
 				DependsOn: []string{"svc1"},
-				OnClose: services.CleanupCommands{
+				OnClose: internal.CleanupCommands{
 					{Command: "echo", Args: []string{"cleanup-svc2"}},
 				},
 			},
 		},
-		OnClose: services.CleanupCommands{
+		OnClose: internal.CleanupCommands{
 			{Command: "echo", Args: []string{"cleanup-global"}},
 		},
 	}
@@ -70,7 +70,7 @@ func TestOnClose(t *testing.T) {
 			t.Errorf("Expected output to contain %q, but it didn't.\nOutput:\n%s", expected, output)
 		}
 	}
-	
+
 	// Check strict ordering by finding indices
 	idxSvc2 := strings.Index(output, "cleanup-svc2")
 	idxSvc1 := strings.Index(output, "cleanup-svc1")

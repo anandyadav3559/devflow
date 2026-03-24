@@ -4,12 +4,12 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/anandyadav3559/devflow/services"
+	internal "github.com/anandyadav3559/devflow/internal/storage"
 )
 
 // TopoSort returns service names in dependency order using Kahn's algorithm.
 // Returns an error if an unknown dependency or circular dependency is found.
-func TopoSort(services map[string]services.Service) ([]string, error) {
+func TopoSort(services map[string]internal.Service) ([]string, error) {
 	inDegree := make(map[string]int)
 	dependents := make(map[string][]string) // dependency -> services that need it
 

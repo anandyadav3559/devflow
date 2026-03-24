@@ -6,6 +6,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/anandyadav3559/devflow/internal/config"
 )
 
 // terminalDef describes how to build the argument list for a specific
@@ -134,9 +136,18 @@ func keepOpenShell(cmd []string, dir string, vars map[string]string, logFile str
 }
 
 // detectTerminal returns the best available terminal emulator.
-// Prefers the terminal set in $TERMINAL or $TERM_PROGRAM, then walks the
-// supported list and returns the first one installed.
+// Prefers the terminal set in config, then $TERMINAL or $TERM_PROGRAM,
+// then walks the supported list and returns the first one installed.
 func detectTerminal() *terminalDef {
+	pref := config.Current.Terminal
+	if pref != "" && pref != "auto" {
+		for i, t := range supportedTerminals {
+			if t.bin == pref || strings.HasSuffix(pref, "/"+t.bin) {
+				return &supportedTerminals[i]
+			}
+		}
+	}
+
 	for _, envKey := range []string{"TERMINAL", "TERM_PROGRAM"} {
 		if bin := os.Getenv(envKey); bin != "" {
 			for i, t := range supportedTerminals {

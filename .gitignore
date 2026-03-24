@@ -1,0 +1,31 @@
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.bin
+devflow
+
+# Test outputs
+*.test
+*.out
+coverage.txt
+coverage.out
+c.out
+
+# Logs
+*.log
+log/
+logs/
+
+# Local databases/state
+dump.rdb
+
+# IDEs and OS files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store

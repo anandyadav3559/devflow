@@ -1,16 +1,52 @@
-# Command Orchestrator
+# DevFlow Command Orchestrator
 
-A Go-based tool for orchestrating multiple services defined in a YAML workflow. It supports dependency management, detached processes, and opening services in new terminal windows.
+A robust Go-based CLI tool for orchestrating multiple services defined in a YAML workflow. It supports strict dependency management, detached processes, isolated terminal window execution, and intelligent teardowns.
+
+## Overview
+
+DevFlow goes beyond a simple script runner. It natively builds, validates, and snapshots your environment setups into a local `.devflow` registry, ensuring your execution graphs are reproducible and insulated from raw file changes.
 
 ## Features
 
-- **YAML Workflow**: Define services, commands, args, and vars. Supports both single-command and list-based `on_close` cleanup.
+- **YAML Workflows**: Define services, commands, args, and vars. Supports both single-command and list-based `on_close` cleanup.
+- **Workflow Registry**: Build and snapshot workflows so they can be securely launched by name from anywhere.
 - **Readiness Polling**: Automatically waits for a dependency's port to be active before launching dependent services.
 - **Fail-Fast Core**: If a prerequisite service fails to start, all downstream dependents are gracefully skipped to prevent "zombie" states.
 - **Safe Cascading Shutdown**: If a terminal window is closed or a process dies, the orchestrator automatically triggers a `SIGTERM` sequence for all services that depend on it.
 - **Graceful Termination**: Uses a `SIGTERM` -> `Wait (3s)` -> `SIGKILL` escalation policy to ensure data integrity (no more database corruption).
-- **Cleanup Timeouts**: Each `on_close` command is wrapped in a 15-second watchdog timer.
+- **Centralized Logging**: All stdout/stderr streams from orchestrated services are routed to `.devflow/logs/`.
 - **Terminal Shell Safety**: Full shell-escaping for environment variables and paths to prevent command injection.
+
+## Commands
+
+DevFlow utilizes a modern CLI structure:
+
+### `devflow build`
+Validates your YAML workflow file, checking for syntax errors and circular dependencies. If valid, it snapshots a copy into `.devflow/flows` and registers it with a unique ID in `.devflow/storage/workflows.json`.
+```bash
+devflow build -f workflows/workflow.yml
+```
+*If a naming conflict occurs, DevFlow will interactively prompt you to resolve it, or you can force a custom name with `-n <name>`.*
+
+### `devflow start`
+Executes an orchestrated workflow. It resolves dependencies, opens physical terminal windows (optionally detached), and monitors ports. You can run raw files or invoke registered snapshots by name.
+```bash
+devflow start -f workflows/workflow.yml
+# OR start a registered snapshot:
+devflow start -n bio_geo_guesser_dev
+```
+
+### `devflow ls`
+Lists all currently registered and snapshotted workflows available in your local DevFlow storage.
+```bash
+devflow ls
+```
+
+### `devflow rm`
+Deletes a registered workflow from your registry and cleans up its snapshot file.
+```bash
+devflow rm bio_geo_guesser_dev
+```
 
 ## Workflow Configuration Example
 
@@ -34,44 +70,18 @@ services:
 
 ## In-Depth Internal Mechanics
 
-The Orchestrator operates as a state machine that transitions services from a "discovered" state to an "executed" state. This process is governed by the `TopoSort` engine in `services/scheduler.go`.
-
-### The Scheduler Loop
-1. **Analysis**: The scheduler first scans the entire workflow set to build an adjacency list and calculate the initial `in-degree` for every service.
-2. **Kahn's Algorithm**: It identifies all services with an `in-degree` of 0 (no prerequisites).
-3. **Queueing**: These services are lexicographically sorted and placed into an execution queue.
-4. **Reduction**: As each service "completes" its startup phase, the scheduler "remember" this event and decrements the `in-degree` of all downstream services that depend on it.
-
-## Depth as a Memory Context
-
-Unlike simple recursive dependency resolvers, this system treats **depth** (the topological rank) as a persistent **memory context**. 
-
-In a complex distributed system, knowing *which* level of the infrastructure you are currently building is critical. The "depth" context provides:
-- **Prerequisite Awareness**: Each service at Depth `N` implicitly carries the context that all services at Depths `< N` are already initialized.
-- **State Persistence**: The internal `inDegree` map acts as the orchestrator's memory. It doesn't need to re-scan the graph; it simply reacts to the state changes in its memory as dependencies are cleared.
-- **Crash Recovery Pre-simulation**: By calculating depth-based layers, the system can predict the impact of a service failure at any given "memory level" of the orchestration.
-
-## Core Architecture & Program Flow
-
-The orchestrator is organized into modular files that handle distinct phases of the execution lifecycle: from parsing the YAML to resolving dependencies, spawning processes, and performing cleanup.
-
-### Component Responsibilities
-
-- **`main.go`**: CLI entry point.
-- **`services/scheduler.go`**: The "Brain". Handles TopoSort, Readiness/Fail-Fast logic, and the Cascading Shutdown state machine.
-- **`services/runner.go`**: The "Actuator". Performs port checks, readiness polling, and OS process spawning.
-- **`services/terminal.go`**: The "UI Bridge". Safely shell-quotes commands and wraps them in a shell that stays open on exit.
+The Orchestrator operates as a state machine that transitions services from a "discovered" state to an "executed" state. This process is governed by the `TopoSort` engine in `services/scheduler/scheduler.go`.
 
 ### Execution Lifecycle
 
 ```mermaid
 sequenceDiagram
     autonumber
-    participant Main as main.go
-    participant Scheduler as services/scheduler.go
-    participant Runner as services/runner.go
+    participant CLI as cmd
+    participant Scheduler as services/scheduler
+    participant Runner as services/runner
     
-    Main->>Scheduler: Start(workflow.yml)
+    CLI->>Scheduler: Start(workflow_name)
     
     Note over Scheduler: Phase 1: Dependency Sort (Kahn's)
     
@@ -95,17 +105,8 @@ sequenceDiagram
     
     Note over Scheduler: Phase 4: Graceful Exit
     Scheduler->>Scheduler: SIGTERM -> Wait (3s) -> SIGKILL escalation
-    Scheduler-->>Main: Exit 0
+    Scheduler-->>CLI: Exit 0
 ```
-
-## Getting Started
-
-1. Configure your services in `workflows/workflow.yml`.
-2. Ensure you have Go 1.25.8+ installed.
-3. Launch:
-   ```bash
-   go run main.go
-   ```
 
 ## Running Tests
 ```bash

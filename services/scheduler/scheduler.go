@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	internal "github.com/anandyadav3559/devflow/internal/storage"
 	"github.com/anandyadav3559/devflow/services"
 )
 
@@ -40,7 +41,7 @@ func Start(file string) {
 	var logDir string
 	for _, svc := range wf.Services {
 		if svc.Log || wf.Log {
-			logDir = filepath.Join("log", fmt.Sprintf("%s-%s", wf.WorkflowName, time.Now().Format("20060102-150405")))
+			logDir = filepath.Join(internal.GetLogsPath(), fmt.Sprintf("%s-%s", wf.WorkflowName, time.Now().Format("20060102-150405")))
 			os.MkdirAll(logDir, 0755)
 			break
 		}
@@ -91,7 +92,7 @@ func Start(file string) {
 				procMu.Unlock()
 
 				wg.Add(1)
-				go func(serviceName string, service services.Service, process *exec.Cmd, fin func()) {
+				go func(serviceName string, service internal.Service, process *exec.Cmd, fin func()) {
 					defer wg.Done()
 					process.Wait() // Blocks until terminal is closed or background process exits
 

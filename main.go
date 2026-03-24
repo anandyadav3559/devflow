@@ -1,6 +1,18 @@
 package main
 
 import (
+	"github.com/anandyadav3559/devflow/cmd"
+)
+
+func main() {
+	cmd.Execute()
+}
+
+/*
+
+package main
+
+import (
 	"flag"
 	"fmt"
 	"os"
@@ -19,3 +31,4 @@ func main() {
 
 	scheduler.Start(*workflowFile)
 }
+*/

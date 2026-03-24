@@ -32,7 +32,7 @@ func TestWorkflowDependencies(t *testing.T) {
 		if len(svc.DependsOn) > 0 {
 			deps = strings.Join(svc.DependsOn, ", ")
 		}
-		
+
 		varsStr := "{}"
 		if len(svc.Vars) > 0 {
 			var vParts []string
@@ -60,7 +60,7 @@ func TestWorkflowDependencies(t *testing.T) {
 	for name, svc := range wf.Services {
 		for _, dep := range svc.DependsOn {
 			if position[dep] >= position[name] {
-				t.Errorf("service %q started at %d, but its dependency %q started later at %d", 
+				t.Errorf("service %q started at %d, but its dependency %q started later at %d",
 					name, position[name], dep, position[dep])
 			}
 		}
