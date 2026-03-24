@@ -1,24 +1,17 @@
 workflow_name: bio_geo_guesser_dev
-
 services:
   db_stack:
+    log: true
     command: docker
-    args:
-      - compose
-      - up
+    args: ["compose", "up"]
     path: ~/geoguesser-v2/extraction
     on_close:
       command: docker
-      args:
-        - compose
-        - down
+      args: ["compose", "down"]
 
   backend:
     command: uv
-    args:
-      - run
-      - manage.py
-      - runserver
+    args: ["run", "manage.py", "runserver"]
     path: ~/geoguesser-v2/backend
     depends_on: ["db_stack"]
     on_close:
@@ -26,9 +19,7 @@ services:
 
   frontend:
     command: npm
-    args:
-      - run
-      - dev
+    args: ["run", "dev"]
     path: ~/geoguesser-v2/frontend/frontend
     depends_on: ["backend"]
     on_close:

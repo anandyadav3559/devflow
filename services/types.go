@@ -43,16 +43,18 @@ type Workflow struct {
 	WorkflowName string             `yaml:"workflow_name"`
 	Services     map[string]Service `yaml:"services"`
 	OnClose      CleanupCommands    `yaml:"on_close,omitempty"`
+	Log          bool               `yaml:"log,omitempty"`
 }
 
 // Service describes a single runnable process in the workflow.
 type Service struct {
-	Command   string             `yaml:"command"`
-	Args      []string           `yaml:"args,omitempty"`
-	Vars      map[string]string  `yaml:"vars,omitempty"`
-	Path      string             `yaml:"path,omitempty"`
-	Port      int                `yaml:"port,omitempty"`
-	DependsOn []string           `yaml:"depends_on,omitempty"`
-	Detached  bool               `yaml:"detached,omitempty"`
-	OnClose   CleanupCommands    `yaml:"on_close,omitempty"`
+	Command   string            `yaml:"command"`
+	Args      []string          `yaml:"args,omitempty"`
+	Vars      map[string]string `yaml:"vars,omitempty"`
+	Path      string            `yaml:"path,omitempty"`
+	Port      int               `yaml:"port,omitempty"`
+	DependsOn []string          `yaml:"depends_on,omitempty"`
+	Detached  bool              `yaml:"detached,omitempty"`
+	Log       bool              `yaml:"log,omitempty"`
+	OnClose   CleanupCommands   `yaml:"on_close,omitempty"`
 }

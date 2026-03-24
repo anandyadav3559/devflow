@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"sync"
 	"syscall"
 	"time"
@@ -35,6 +36,15 @@ func Start(file string) {
 
 	runningProcs := make(map[string]*exec.Cmd)
 	var procMu sync.Mutex
+
+	var logDir string
+	for _, svc := range wf.Services {
+		if svc.Log || wf.Log {
+			logDir = filepath.Join("log", fmt.Sprintf("%s-%s", wf.WorkflowName, time.Now().Format("20060102-150405")))
+			os.MkdirAll(logDir, 0755)
+			break
+		}
+	}
 
 	for _, name := range order {
 		svc := wf.Services[name]
@@ -69,7 +79,7 @@ func Start(file string) {
 			fmt.Printf("Starting %q (new terminal)...\n", name)
 		}
 
-		cmd, err := services.RunService(name, svc)
+		cmd, finalizer, err := services.RunService(name, svc, wf.Log, logDir)
 		if err != nil {
 			fmt.Printf("  ✗ Error: %v\n", err)
 			failedServices.Store(name, true)
@@ -81,9 +91,13 @@ func Start(file string) {
 				procMu.Unlock()
 
 				wg.Add(1)
-				go func(serviceName string, service services.Service, process *exec.Cmd) {
+				go func(serviceName string, service services.Service, process *exec.Cmd, fin func()) {
 					defer wg.Done()
 					process.Wait() // Blocks until terminal is closed or background process exits
+
+					if fin != nil {
+						fin()
+					}
 
 					// Run service-specific cleanup immediately
 					if _, alreadyCleaned := cleanedUp.LoadOrStore(serviceName, true); !alreadyCleaned {
@@ -92,7 +106,7 @@ func Start(file string) {
 
 					// Cascade: if this service dies, kill things that relied on it
 					killDependents(serviceName, wf.Services, runningProcs, &procMu)
-				}(name, svc, cmd)
+				}(name, svc, cmd, finalizer)
 			}
 		}
 	}

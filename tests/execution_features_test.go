@@ -8,7 +8,6 @@ import (
 	"os"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/anandyadav3559/devflow/services"
 )
@@ -35,13 +34,13 @@ echo "VAR1=$TEST_VAR"`
 		r, w, _ := os.Pipe()
 		os.Stdout = w
 
-		_, err := services.RunService("test-svc", service)
+		cmd, _, err := services.RunService("test-svc", service, false, "")
 		if err != nil {
 			t.Fatalf("Failed to run service: %v", err)
 		}
 
-		// Wait a bit for the process to run
-		time.Sleep(200 * time.Millisecond)
+		// Wait for the process to finish
+		cmd.Wait()
 		w.Close()
 		os.Stdout = oldStdout
 
@@ -73,7 +72,7 @@ echo "VAR1=$TEST_VAR"`
 			Detached: true,
 		}
 
-		_, err = services.RunService("port-svc", service)
+		_, _, err = services.RunService("port-svc", service, false, "")
 		if err == nil {
 			t.Fatalf("Expected RunService to return error on port conflict, but got nil")
 		}
