@@ -1,9 +1,18 @@
 package storage
 
-import "path/filepath"
+import (
+	"os"
+	"path/filepath"
+)
 
 func GetBasePath() string {
-	return "./.devflow" // dev mode
+	configDir, err := os.UserConfigDir()
+	if err != nil {
+		// Fallback to home dir if UserConfigDir fails
+		home, _ := os.UserHomeDir()
+		return filepath.Join(home, ".devflow")
+	}
+	return filepath.Join(configDir, "devflow")
 }
 
 func GetStoragePath() string {

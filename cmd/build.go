@@ -17,6 +17,7 @@ import (
 
 var buildFile string
 var buildName string
+var forceMode bool
 
 var buildCmd = &cobra.Command{
 	Use:   "build",
@@ -26,7 +27,7 @@ and that there are no circular dependencies. If the workflow is valid, it saves
 a reference in your local DevFlow storage (.devflow/storage) with a unique ID 
 so that it can be tracked and run easily in the future.`,
 	Example: `  devflow build -f workflows/my-project.yml`,
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		// load config
 		if err := config.Load(); err != nil {
 			fmt.Println("Warning:", err)
@@ -37,8 +38,7 @@ so that it can be tracked and run easily in the future.`,
 
 		// validate file
 		if _, err := os.Stat(buildFile); os.IsNotExist(err) {
-			fmt.Printf("Error: Workflow file %q not found\n", buildFile)
-			os.Exit(1)
+			return fmt.Errorf("workflow file %q not found", buildFile)
 		}
 
 		// Resolve absolute path for storage
@@ -49,13 +49,11 @@ so that it can be tracked and run easily in the future.`,
 
 		wf, err := services.LoadWorkflow(absPath)
 		if err != nil {
-			fmt.Printf("Error loading workflow: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("error loading workflow: %v", err)
 		}
 
 		if err := validateworkflow(wf); err != nil {
-			fmt.Printf("Validation failed: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("validation failed: %v", err)
 		}
 
 		finalName := wf.WorkflowName
@@ -66,8 +64,7 @@ so that it can be tracked and run easily in the future.`,
 		// Check for conflicts before saving
 		wfs, err := storage.LoadWorkflows()
 		if err != nil {
-			fmt.Printf("Error checking existing workflows: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("error checking existing workflows: %v", err)
 		}
 
 		nameExists := func(name string) bool {
@@ -80,23 +77,30 @@ so that it can be tracked and run easily in the future.`,
 		}
 
 		if nameExists(finalName) {
-			reader := bufio.NewReader(os.Stdin)
-			fmt.Printf("A workflow named %q already exists from a different file.\n", finalName)
-			for {
-				fmt.Print("Enter a new, unique name for this workflow: ")
-				inputName, err := reader.ReadString('\n')
-				if err != nil {
-					fmt.Println("\nAborted.")
-					os.Exit(1)
+			if forceMode {
+				storage.DeleteWorkflow(finalName)
+			} else {
+				fi, _ := os.Stdin.Stat()
+				if (fi.Mode() & os.ModeCharDevice) == 0 {
+					return fmt.Errorf("workflow named %q already exists and stdin is not a terminal; use --force to overwrite", finalName)
 				}
-				
-				inputName = strings.TrimSpace(inputName)
-				if inputName != "" {
-					if !nameExists(inputName) {
-						finalName = inputName
-						break
+				reader := bufio.NewReader(os.Stdin)
+				fmt.Printf("A workflow named %q already exists from a different file.\n", finalName)
+				for {
+					fmt.Print("Enter a new, unique name for this workflow: ")
+					inputName, err := reader.ReadString('\n')
+					if err != nil {
+						return fmt.Errorf("\naborted")
 					}
-					fmt.Printf("Name %q also exists.\n", inputName)
+					
+					inputName = strings.TrimSpace(inputName)
+					if inputName != "" {
+						if !nameExists(inputName) {
+							finalName = inputName
+							break
+						}
+						fmt.Printf("Name %q also exists.\n", inputName)
+					}
 				}
 			}
 		}
@@ -109,8 +113,7 @@ so that it can be tracked and run easily in the future.`,
 		}
 
 		if err := storage.SaveWorkflow(metadata); err != nil {
-			fmt.Printf("Error saving workflow reference: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("error saving workflow reference: %v", err)
 		}
 
 		// Update name internally to match the new unique assignment + UID
@@ -125,12 +128,14 @@ so that it can be tracked and run easily in the future.`,
 		}
 
 		fmt.Printf("Workflow %q successfully built and registered with ID: %s\n", metadata.Name, metadata.UID)
+		return nil
 	},
 }
 
 func init() {
 	buildCmd.Flags().StringVarP(&buildFile, "file", "f", "", "Path to workflow file")
 	buildCmd.Flags().StringVarP(&buildName, "name", "n", "", "Custom name for the registered workflow")
+	buildCmd.Flags().BoolVar(&forceMode, "force", false, "Force overwrite existing workflow with the same name")
 	buildCmd.MarkFlagRequired("file")
 
 	rootCmd.AddCommand(buildCmd)

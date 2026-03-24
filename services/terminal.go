@@ -1,10 +1,12 @@
 package services
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/anandyadav3559/devflow/internal/config"
@@ -169,7 +171,56 @@ func detectTerminal() *terminalDef {
 
 // openInNewTerminal launches cmd in a new terminal window with the given title
 // and optional working directory.
-func openInNewTerminal(title string, cmd []string, dir string, vars map[string]string, logFile string) (*exec.Cmd, func(), error) {
+func openInNewTerminal(ctx context.Context, title string, cmd []string, dir string, vars map[string]string, logFile string) (*exec.Cmd, func(), error) {
+	if runtime.GOOS == "windows" {
+		// Native Windows fallback using cmd.exe
+		var envParts []string
+		for k, v := range vars {
+			envParts = append(envParts, fmt.Sprintf("set %s=%s", k, v))
+		}
+		envPrefix := ""
+		if len(envParts) > 0 {
+			envPrefix = strings.Join(envParts, " && ") + " && "
+		}
+
+		cmdStr := strings.Join(cmd, " ")
+		batCommand := envPrefix + cmdStr + " & echo. & echo --- process exited (press any key to close) --- & pause"
+
+		// Use start command. Title must be first quoted arg.
+		args := []string{"/c", "start", title}
+		if dir != "" {
+			args = append(args, "/D", dir)
+		}
+		args = append(args, "cmd.exe", "/c", batCommand)
+
+		c := exec.CommandContext(ctx, "cmd.exe", args...)
+		c.Stdout = os.Stdout
+		c.Stderr = os.Stderr
+		fmt.Printf("  → using cmd.exe\n")
+		err := c.Start()
+		return c, func() {}, err
+	}
+
+	if runtime.GOOS == "darwin" {
+		// Native macOS fallback using AppleScript and Terminal.app
+		shellCmds := keepOpenShell(cmd, dir, vars, logFile)
+		// keepOpenShell returns []string{"sh", "-c", "<script>"}
+		// we just need the <script> part to pass to osascript
+		scriptStr := shellCmds[2]
+
+		// Escape the script for AppleScript string literals (escape \ and ")
+		scriptStr = strings.ReplaceAll(scriptStr, `\`, `\\`)
+		scriptStr = strings.ReplaceAll(scriptStr, `"`, `\"`)
+
+		appleScript := fmt.Sprintf(`tell application "Terminal" to do script "%s"`, scriptStr)
+		c := exec.CommandContext(ctx, "osascript", "-e", appleScript)
+		c.Stdout = os.Stdout
+		c.Stderr = os.Stderr
+		fmt.Printf("  → using Terminal.app (osascript)\n")
+		err := c.Start()
+		return c, func() {}, err
+	}
+
 	t := detectTerminal()
 	if t == nil {
 		return nil, nil, fmt.Errorf("no terminal emulator found " +
@@ -177,7 +228,7 @@ func openInNewTerminal(title string, cmd []string, dir string, vars map[string]s
 	}
 
 	args := t.buildArgs(title, cmd, dir, vars, logFile)
-	c := exec.Command(t.bin, args...)
+	c := exec.CommandContext(ctx, t.bin, args...)
 	c.Stdout = os.Stdout
 	c.Stderr = os.Stderr
 	fmt.Printf("  → using %s\n", t.bin)

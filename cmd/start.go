@@ -1,9 +1,12 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"os/signal"
 	"path/filepath"
+	"syscall"
 
 	"github.com/anandyadav3559/devflow/internal/config"
 	"github.com/anandyadav3559/devflow/internal/storage"
@@ -23,7 +26,7 @@ in individual terminal windows (or detached processes). When you kill the sessio
 DevFlow automatically runs the cleanup commands for each service.`,
 	Example: `  devflow start -f workflows/my-project.yml
   devflow start -n my_custom_workflow`,
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 
 		// load config
 		if err := config.Load(); err != nil {
@@ -37,18 +40,20 @@ DevFlow automatically runs the cleanup commands for each service.`,
 		if startName != "" {
 			workflowFile = filepath.Join(storage.GetFlowsPath(), startName+".yml")
 		} else if workflowFile == "" {
-			fmt.Println("Error: You must specify either --file (-f) or --name (-n)")
-			os.Exit(1)
+			return fmt.Errorf("you must specify either --file (-f) or --name (-n)")
 		}
 
 		// validate file
 		if _, err := os.Stat(workflowFile); os.IsNotExist(err) {
-			fmt.Printf("Error: Workflow file %q not found\n", workflowFile)
-			os.Exit(1)
+			return fmt.Errorf("workflow file %q not found", workflowFile)
 		}
 
+		ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer cancel()
+
 		// start workflow
-		scheduler.Start(workflowFile)
+		scheduler.Start(ctx, workflowFile)
+		return nil
 	},
 }
 

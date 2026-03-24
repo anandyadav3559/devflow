@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net"
@@ -14,7 +15,7 @@ import (
 
 // RunService starts a service — either detached (background process) or
 // in a new terminal window, depending on the Detached flag. The logDir should be relative or absolute.
-func RunService(name string, service internal.Service, globalLog bool, runLogDir string) (*exec.Cmd, func(), error) {
+func RunService(ctx context.Context, wfUID string, name string, service internal.Service, globalLog bool, runLogDir string) (*exec.Cmd, func(), error) {
 	dir := ExpandPath(service.Path)
 
 	shouldLog := service.Log || globalLog
@@ -32,22 +33,22 @@ func RunService(name string, service internal.Service, globalLog bool, runLogDir
 	}
 
 	if service.Detached {
-		return runDetached(name, service, dir, logFile)
+		return runDetached(ctx, wfUID, name, service, dir, logFile)
 	}
 
 	cmdParts := append([]string{service.Command}, service.Args...)
-	return openInNewTerminal(name, cmdParts, dir, service.Vars, logFile)
+	return openInNewTerminal(ctx, name, cmdParts, dir, service.Vars, logFile)
 }
 
 // runDetached runs the service as a silent background process.
 // If a port is set and already in use, it returns an error to prevent blindly
 // connecting to an unrelated or zombie process.
-func runDetached(name string, service internal.Service, dir string, logFile string) (*exec.Cmd, func(), error) {
+func runDetached(ctx context.Context, wfUID string, name string, service internal.Service, dir string, logFile string) (*exec.Cmd, func(), error) {
 	if service.Port > 0 && isPortInUse(service.Port) {
 		return nil, nil, fmt.Errorf("port %d is already in use; cannot safely start service %q", service.Port, name)
 	}
 
-	cmd := exec.Command(service.Command, service.Args...)
+	cmd := exec.CommandContext(ctx, service.Command, service.Args...)
 	if dir != "" {
 		cmd.Dir = dir
 	}
@@ -81,6 +82,9 @@ func runDetached(name string, service internal.Service, dir string, logFile stri
 	cmd.Env = env
 
 	err := cmd.Start()
+	if err == nil && wfUID != "" {
+		internal.SavePID(wfUID, name, cmd.Process.Pid)
+	}
 	return cmd, finalizer, err
 }
 

@@ -1,13 +1,12 @@
 package scheduler
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
-	"os/signal"
 	"path/filepath"
 	"sync"
-	"syscall"
 	"time"
 
 	internal "github.com/anandyadav3559/devflow/internal/storage"
@@ -16,7 +15,7 @@ import (
 
 // Start is the top-level entry point. It loads the workflow, resolves
 // dependency order, and launches each service. Then it waits for a termination signal to run cleanup.
-func Start(file string) {
+func Start(ctx context.Context, file string) {
 	wf, err := services.LoadWorkflow(file)
 	if err != nil {
 		fmt.Println("Error loading workflow:", err)
@@ -80,7 +79,7 @@ func Start(file string) {
 			fmt.Printf("Starting %q (new terminal)...\n", name)
 		}
 
-		cmd, finalizer, err := services.RunService(name, svc, wf.Log, logDir)
+		cmd, finalizer, err := services.RunService(ctx, wf.WorkflowName, name, svc, wf.Log, logDir)
 		if err != nil {
 			fmt.Printf("  ✗ Error: %v\n", err)
 			failedServices.Store(name, true)
@@ -113,9 +112,6 @@ func Start(file string) {
 	}
 
 	// Wait for termination signal or all child processes to gracefully close
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
-
 	doneChan := make(chan struct{})
 	go func() {
 		wg.Wait()
@@ -125,7 +121,7 @@ func Start(file string) {
 	fmt.Println("\nAll services started. Press Ctrl+C to terminate and run cleanup.")
 
 	select {
-	case <-sigChan:
+	case <-ctx.Done():
 		fmt.Println("\nReceived termination signal. Running global cleanup sequence...")
 		RunCleanup(wf, order, &cleanedUp, runningProcs, &procMu)
 		wg.Wait() // Ensure all goroutines wrap up cleanly after we kill them
