@@ -1,4 +1,4 @@
-workflow_name: bio_geo_guesser_dev
+workflow_name: bioguesser
 services:
   db_stack:
     log: true

@@ -29,3 +29,7 @@ dump.rdb
 *.swo
 *~
 .DS_Store
+
+# Distribution packaging
+devflow-aur/
+devflow-dnf/

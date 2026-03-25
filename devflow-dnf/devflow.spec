@@ -1,7 +1,7 @@
 %global debug_package %{nil}
 
 Name:           devflow
-Version:        0.1.0
+Version:        0.1.1
 Release:        1%{?dist}
 Summary:        Lightweight workflow orchestrator for local development
 
@@ -38,5 +38,10 @@ install -Dm755 %{name} %{buildroot}%{_bindir}/%{name}
 %{_bindir}/%{name}
 
 %changelog
+* Wed Mar 25 2026 Anand Yadav - 0.1.1-1
+- Add daemonization for terminal independence
+- Implement per-workflow isolation (PID/Logs/State)
+- Support concurrent workflows and interactive conflict resolution
+
 * Tue Mar 24 2026 Anand Yadav - 0.1.0-1
 - Initial COPR release

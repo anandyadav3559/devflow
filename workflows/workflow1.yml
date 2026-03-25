@@ -1,31 +1,29 @@
-workflow_name: bio_geo_guesser_dev
+workflow_name: bioguesser
 services:
-  database:
-    command: echo "Starting Postgres..."
-    detached: true
-
-  cache:
-    command: echo "Starting Redis..."
-    detached: true
+  db_stack:
+    log: true
+    command: docker
+    args: ["compose", "up"]
+    path: ~/geoguesser-v2/extraction
+    on_close:
+      command: docker
+      args: ["compose", "down"]
 
   backend:
-    command: echo
-    args: ["Launching API Server with", "custom args..."]
-    vars:
-      API_ENV: "production"
-      DEBUG: "true"
-    depends_on: ["database", "cache"]
+    command: uv
+    args: ["run", "manage.py", "runserver"]
+    path: ~/geoguesser-v2/backend
+    depends_on: ["db_stack"]
+    on_close:
+      - command: echo "Shutting down backend..."
 
   frontend:
-    command: echo
-    args: ["Starting Web UI on port 3000"]
+    command: npm
+    args: ["run", "dev"]
+    path: ~/geoguesser-v2/frontend/frontend
     depends_on: ["backend"]
-    port: 3000
+    on_close:
+      - command: echo "Shutting down frontend..."
 
-  monitoring:
-    command: echo
-    args: ["Starting Prometheus..."]
-    vars:
-      RETENTION_DAYS: "15"
-    detached: true
-    depends_on: ["backend"]
+on_close:
+  - command: echo "All individual services have been cleaned up! Global cleanup finished."

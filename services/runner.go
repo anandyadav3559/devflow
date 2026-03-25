@@ -3,7 +3,6 @@ package services
 import (
 	"context"
 	"fmt"
-	"io"
 	"net"
 	"os"
 	"os/exec"
@@ -62,16 +61,20 @@ func runDetached(ctx context.Context, wfUID string, name string, service interna
 		timeStr := time.Now().Format(time.RFC3339)
 		f.WriteString(fmt.Sprintf("--- Start Time: %s ---\n", timeStr))
 
-		cmd.Stdout = io.MultiWriter(os.Stdout, f)
-		cmd.Stderr = io.MultiWriter(os.Stderr, f)
+		// Detached: write only to log file, not the main terminal.
+		cmd.Stdout = f
+		cmd.Stderr = f
 
 		finalizer = func() {
 			f.WriteString(fmt.Sprintf("--- End Time: %s ---\n", time.Now().Format(time.RFC3339)))
 			f.Close()
 		}
 	} else {
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
+		// No log file: discard output entirely so the main terminal stays quiet.
+		null, _ := os.Open(os.DevNull)
+		cmd.Stdout = null
+		cmd.Stderr = null
+		finalizer = func() { null.Close() }
 	}
 
 	// Inject environment variables

@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 )
@@ -25,4 +26,15 @@ func GetLogsPath() string {
 
 func GetFlowsPath() string {
 	return filepath.Join(GetBasePath(), "flows")
+}
+
+// GetDaemonPidPath returns the path to the devflow daemon PID file for a specific workflow.
+func GetDaemonPidPath(workflowName string) string {
+	return filepath.Join(GetBasePath(), workflowName+".pid")
+}
+
+// GetDaemonLogPath returns a timestamped log file path for the daemon of a specific workflow.
+// ts should be a compact timestamp string, e.g. "20060102-150405".
+func GetDaemonLogPath(workflowName string, ts string) string {
+	return filepath.Join(GetLogsPath(), fmt.Sprintf("devflow-daemon-%s-%s.log", workflowName, ts))
 }
