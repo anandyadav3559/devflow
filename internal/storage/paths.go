@@ -38,3 +38,8 @@ func GetDaemonPidPath(workflowName string) string {
 func GetDaemonLogPath(workflowName string, ts string) string {
 	return filepath.Join(GetLogsPath(), fmt.Sprintf("devflow-daemon-%s-%s.log", workflowName, ts))
 }
+
+// GetDaemonSocketPath returns the path to the devflow daemon IPC socket for a specific workflow.
+func GetDaemonSocketPath(workflowName string) string {
+	return filepath.Join(GetBasePath(), workflowName+".sock")
+}

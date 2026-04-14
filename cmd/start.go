@@ -30,7 +30,7 @@ const envDaemonKey = "DEVFLOW_DAEMON"
 const envRenamePrefix = "DEVFLOW_RENAME_"
 
 var startCmd = &cobra.Command{
-	Use:   "start",
+	Use:   "start <workflow>[.<service>] [additional_services...]",
 	Short: "Start a workflow (by name or file)",
 	Long: `Starts a workflow defined in the specified YAML file or by its registered name.
 This command resolves dependencies among services and safely launches them
@@ -39,7 +39,7 @@ orchestrator runs as a background daemon so the terminal is freed immediately.
 Use --no-daemon to keep it in the foreground.`,
 	Example: `  devflow start -f workflows/my-project.yml
   devflow start -n my_custom_workflow
-  devflow start --no-daemon -f workflows/my-project.yml`,
+  devflow start my_workflow.frontend backend`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 
 		// load config
@@ -50,11 +50,28 @@ Use --no-daemon to keep it in the foreground.`,
 		// ensure dirs exist (lazy init)
 		storage.Bootstrap()
 
+		var targetServices []string
+		targetService := ""
+		if len(args) > 0 {
+			target := args[0]
+			parts := strings.SplitN(target, ".", 2)
+			if startName == "" {
+				startName = parts[0]
+			}
+			if len(parts) == 2 {
+				targetService = parts[1]
+				targetServices = append(targetServices, targetService)
+			}
+			if len(args) > 1 {
+				targetServices = append(targetServices, args[1:]...)
+			}
+		}
+
 		// resolve by name if specified
 		if startName != "" {
 			workflowFile = filepath.Join(storage.GetFlowsPath(), startName+".yml")
 		} else if workflowFile == "" {
-			return fmt.Errorf("you must specify either --file (-f) or --name (-n)")
+			return fmt.Errorf("you must specify either --file (-f) or --name (-n), or provide the name as an argument")
 		}
 
 		// validate file
@@ -84,7 +101,7 @@ Use --no-daemon to keep it in the foreground.`,
 				effectiveName = sessionName
 			}
 
-			scheduler.StartDaemon(ctx, effectiveName, workflowFile)
+			scheduler.StartDaemon(ctx, effectiveName, workflowFile, targetServices)
 			return nil
 		}
 
@@ -139,6 +156,18 @@ Use --no-daemon to keep it in the foreground.`,
 
 		// ALSO: Check if effectiveName has a live daemon already!
 		if pid := storage.GetWorkflowDaemonPID(effectiveName); pid > 0 {
+			if len(targetServices) > 0 {
+				sockPath := storage.GetDaemonSocketPath(effectiveName)
+				fmt.Printf("Daemon is running (PID %d). Sending START %v command via IPC...\n", pid, targetServices)
+				cmdStr := "START " + strings.Join(targetServices, " ")
+				resp, err := scheduler.SendIPCCommand(sockPath, cmdStr)
+				if err != nil {
+					return fmt.Errorf("could not send command to daemon (is it dead?): %w", err)
+				}
+				fmt.Printf("Daemon response: %s\n", strings.TrimSpace(resp))
+				return nil
+			}
+
 			if !isTTY() {
 				return fmt.Errorf("workflow %q is already running (PID %d)", effectiveName, pid)
 			}
@@ -212,7 +241,7 @@ Use --no-daemon to keep it in the foreground.`,
 		if noDaemon {
 			ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 			defer cancel()
-			scheduler.Start(ctx, effectiveName, workflowFile, renames)
+			scheduler.Start(ctx, effectiveName, workflowFile, renames, targetServices)
 			return nil
 		}
 
@@ -231,6 +260,9 @@ Use --no-daemon to keep it in the foreground.`,
 		if startName != "" {
 			// Ensure child knows it's running a registered workflow by name
 			childArgs = append(childArgs, "--name", startName)
+		}
+		if len(targetServices) > 0 {
+			childArgs = append(childArgs, targetServices...)
 		}
 
 		childEnv := append(os.Environ(), envDaemonKey+"=1")

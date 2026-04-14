@@ -21,7 +21,7 @@ const renamePrefix = "DEVFLOW_RENAME_"
 // StartDaemon is called by the daemon child process. It redirects the process's
 // own stdout/stderr to a log file, records the PID, applies any service renames
 // passed from the parent, then calls Start normally.
-func StartDaemon(ctx context.Context, workflowName string, file string) {
+func StartDaemon(ctx context.Context, workflowName string, file string, targets []string) {
 	ts := time.Now().Format("20060102-150405")
 	logPath := internal.GetDaemonLogPath(workflowName, ts)
 
@@ -52,7 +52,7 @@ func StartDaemon(ctx context.Context, workflowName string, file string) {
 	}
 
 	// Run the normal scheduler; output goes to logF
-	Start(ctx, workflowName, file, renames)
+	Start(ctx, workflowName, file, renames, targets)
 
 	// Cleanup PID on exit
 	os.Remove(pidPath)
@@ -64,7 +64,7 @@ func StartDaemon(ctx context.Context, workflowName string, file string) {
 // Start is the top-level entry point. It loads the workflow, resolves
 // dependency order, and launches each service. Then it waits for a termination signal to run cleanup.
 // renames maps original service name → new name (empty string = skip that service).
-func Start(ctx context.Context, workflowName string, file string, renames map[string]string) {
+func Start(ctx context.Context, workflowName string, file string, renames map[string]string, initialTargets []string) {
 	wf, err := services.LoadWorkflow(file)
 	if err != nil {
 		fmt.Println("Error loading workflow:", err)
@@ -124,94 +124,137 @@ func Start(ctx context.Context, workflowName string, file string, renames map[st
 		}
 	}
 
-	for _, name := range order {
-		svc := wf.Services[name]
+	spawnGraph := func(targets []string) {
+		subset := make(map[string]bool)
+		if len(targets) > 0 {
+			var visit func(string)
+			visit = func(name string) {
+				if subset[name] {
+					return
+				}
+				subset[name] = true
+				if svc, ok := wf.Services[name]; ok {
+					for _, dep := range svc.DependsOn {
+						visit(dep)
+					}
+				}
+			}
+			for _, t := range targets {
+				visit(t)
+			}
+		}
 
-		// 1. Fail Fast: check if any dependency failed
-		shouldFail := false
-		for _, dep := range svc.DependsOn {
-			if _, failed := failedServices.Load(dep); failed {
-				fmt.Printf("  ⚠ Skipping %q because dependency %q failed to start.\n", name, dep)
+		for _, name := range order {
+			if len(targets) > 0 && !subset[name] {
+				continue
+			}
+
+			svc := wf.Services[name]
+
+			// 1. Fail Fast: check if any dependency failed
+			shouldFail := false
+			for _, dep := range svc.DependsOn {
+				if _, failed := failedServices.Load(dep); failed {
+					fmt.Printf("  ⚠ Skipping %q because dependency %q failed to start.\n", name, dep)
+					failedServices.Store(name, true)
+					shouldFail = true
+					break
+				}
+			}
+			if shouldFail {
+				continue
+			}
+
+			// 2. Duplicate service name check - DO NOT mark as failed
+			if alive, existing := internal.IsServiceNameActiveInWorkflow(wf.WorkflowName, name); alive {
+				fmt.Printf("  ✓ %q is already running in this workflow (PID %d). Skipping spawn...\n",
+					name, existing.PID)
+				failedServices.Delete(name)
+				continue
+			}
+
+			// 3. Readiness Polling: Wait for dependencies to be ready!
+			for _, dep := range svc.DependsOn {
+				if depSvc, ok := wf.Services[dep]; ok && depSvc.Port > 0 {
+					fmt.Printf("  ⌛ Waiting for dependency %q (port %d) to be ready...\n", dep, depSvc.Port)
+					if !services.WaitForPort(depSvc.Port, 15*time.Second) {
+						fmt.Printf("  ⚠ Timeout waiting for %q port %d! Proceeding anyway...\n", dep, depSvc.Port)
+					}
+				}
+			}
+
+			if svc.Detached {
+				fmt.Printf("Starting %q (detached)...\n", name)
+			} else {
+				fmt.Printf("Starting %q (new terminal)...\n", name)
+			}
+
+			cmd, finalizer, err := services.RunService(ctx, wf.WorkflowName, name, svc, wf.Log, logDir)
+			if err != nil {
+				fmt.Printf("  ✗ Error: %v\n", err)
 				failedServices.Store(name, true)
-				shouldFail = true
-				break
-			}
-		}
-		if shouldFail {
-			continue
-		}
+			} else {
+				fmt.Printf("  ✓ OK\n")
+				if cmd != nil {
+					procMu.Lock()
+					runningProcs[name] = cmd
+					procMu.Unlock()
 
-		// 2. Duplicate service name check - ONLY within the same workflow now
-		if alive, existing := internal.IsServiceNameActiveInWorkflow(wf.WorkflowName, name); alive {
-			fmt.Printf("  ✗ Skipping %q: already running in this workflow (PID %d). Stop it first.\n",
-				name, existing.PID)
-			failedServices.Store(name, true)
-			continue
-		}
-
-
-		// 3. Readiness Polling: Wait for dependencies to be ready!
-		for _, dep := range svc.DependsOn {
-			if depSvc, ok := wf.Services[dep]; ok && depSvc.Port > 0 {
-				fmt.Printf("  ⌛ Waiting for dependency %q (port %d) to be ready...\n", dep, depSvc.Port)
-				if !services.WaitForPort(depSvc.Port, 15*time.Second) {
-					fmt.Printf("  ⚠ Timeout waiting for %q port %d! Proceeding anyway...\n", dep, depSvc.Port)
-				}
-			}
-		}
-
-		if svc.Detached {
-			fmt.Printf("Starting %q (detached)...\n", name)
-		} else {
-			fmt.Printf("Starting %q (new terminal)...\n", name)
-		}
-
-		cmd, finalizer, err := services.RunService(ctx, wf.WorkflowName, name, svc, wf.Log, logDir)
-		if err != nil {
-			fmt.Printf("  ✗ Error: %v\n", err)
-			failedServices.Store(name, true)
-		} else {
-			fmt.Printf("  ✓ OK\n")
-			if cmd != nil {
-				procMu.Lock()
-				runningProcs[name] = cmd
-				procMu.Unlock()
-
-				// Track service in active state (both detached and terminal)
-				if cmd.Process != nil {
-					_ = internal.SaveService(wf.WorkflowName, internal.ActiveEntry{
-						WorkflowName: wf.WorkflowName,
-						WorkflowUID:  wf.WorkflowName,
-						ServiceName:  name,
-						PID:          cmd.Process.Pid,
-						Detached:     svc.Detached,
-						StartedAt:    time.Now().Format(time.RFC3339),
-					})
-				}
-
-				wg.Add(1)
-				go func(serviceName string, service internal.Service, process *exec.Cmd, fin func()) {
-					defer wg.Done()
-					process.Wait() // Blocks until terminal is closed or background process exits
-
-					// Remove from active state tracking
-					_ = internal.RemovePID(wf.WorkflowName, serviceName)
-
-					if fin != nil {
-						fin()
+					// Track service in active state (both detached and terminal)
+					if cmd.Process != nil {
+						_ = internal.SaveService(wf.WorkflowName, internal.ActiveEntry{
+							WorkflowName: wf.WorkflowName,
+							WorkflowUID:  wf.WorkflowName,
+							ServiceName:  name,
+							PID:          cmd.Process.Pid,
+							Detached:     svc.Detached,
+							StartedAt:    time.Now().Format(time.RFC3339),
+						})
 					}
 
-					// Run service-specific cleanup immediately
-					if _, alreadyCleaned := cleanedUp.LoadOrStore(serviceName, true); !alreadyCleaned {
-						runServiceCleanup(serviceName, service)
-					}
+					wg.Add(1)
+					go func(serviceName string, service internal.Service, process *exec.Cmd, fin func()) {
+						defer wg.Done()
+						process.Wait() // Blocks until terminal is closed or background process exits
 
-					// Cascade: if this service dies, kill things that relied on it
-					killDependents(serviceName, wf.Services, runningProcs, &procMu)
-				}(name, svc, cmd, finalizer)
+						// Remove from active state tracking
+						_ = internal.RemovePID(wf.WorkflowName, serviceName)
+
+						if fin != nil {
+							fin()
+						}
+
+						// Run service-specific cleanup immediately
+						if _, alreadyCleaned := cleanedUp.LoadOrStore(serviceName, true); !alreadyCleaned {
+							runServiceCleanup(serviceName, service)
+						}
+
+						// Cascade: if this service dies, kill things that relied on it
+						killDependents(serviceName, wf.Services, runningProcs, &procMu)
+					}(name, svc, cmd, finalizer)
+				}
 			}
 		}
 	}
+
+	// Start IPC Server
+	sockPath := internal.GetDaemonSocketPath(workflowName)
+	StartIPCServer(ctx, sockPath, func(cmd string) string {
+		parts := strings.Fields(cmd)
+		if len(parts) == 0 {
+			return ""
+		}
+		if parts[0] == "START" && len(parts) > 1 {
+			targets := parts[1:]
+			fmt.Printf("\n[IPC] Received command to start: %v\n", targets)
+			spawnGraph(targets)
+			return "OK"
+		}
+		return "UNKNOWN_COMMAND"
+	})
+
+	// Initial spawn of everything
+	spawnGraph(initialTargets)
 
 	// Wait for termination signal or all child processes to gracefully close
 	doneChan := make(chan struct{})
