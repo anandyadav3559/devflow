@@ -33,3 +33,7 @@ dump.rdb
 # Distribution packaging
 devflow-aur/
 devflow-dnf/
+
+
+# vendir
+vendor/
