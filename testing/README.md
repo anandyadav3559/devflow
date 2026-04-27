@@ -10,7 +10,7 @@ This folder contains scripts to run rigorous local checks before pushing or comm
 
 What it runs:
 
-- `gofmt -l .` (fails if formatting is needed)
+- `gofmt` validation on tracked Go files (excluding `vendor/`)
 - `go test ./...`
 - `go test -race ./...`
 
@@ -21,3 +21,5 @@ What it runs:
 ```
 
 After installation, every `git commit` automatically runs the same checks and blocks the commit on failure.
+
+CI parity: `.github/workflows/test.yml` runs the same quality gate on push/PR.
