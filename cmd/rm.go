@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/anandyadav3559/devflow/internal/storage"
 	"github.com/spf13/cobra"
@@ -14,17 +13,19 @@ var rmCmd = &cobra.Command{
 	Long:    `Deletes a workflow from devflow's registry and removes its snapshotted copy in .devflow/flows.`,
 	Example: `  devflow rm my_custom_workflow`,
 	Args:    cobra.ExactArgs(1),
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		name := args[0]
-		
-		storage.Bootstrap()
+
+		if err := storage.Bootstrap(); err != nil {
+			return fmt.Errorf("failed to initialize storage: %w", err)
+		}
 
 		if err := storage.DeleteWorkflow(name); err != nil {
-			fmt.Printf("Error: %v\n", err)
-			os.Exit(1)
+			return err
 		}
 
 		fmt.Printf("Workflow %q deleted successfully.\n", name)
+		return nil
 	},
 }
 

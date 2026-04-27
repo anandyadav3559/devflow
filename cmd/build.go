@@ -34,7 +34,9 @@ so that it can be tracked and run easily in the future.`,
 		}
 
 		// ensure dirs exist
-		storage.Bootstrap()
+		if err := storage.Bootstrap(); err != nil {
+			return fmt.Errorf("failed to initialize storage: %w", err)
+		}
 
 		// validate file
 		if _, err := os.Stat(buildFile); os.IsNotExist(err) {
@@ -78,7 +80,9 @@ so that it can be tracked and run easily in the future.`,
 
 		if nameExists(finalName) {
 			if forceMode {
-				storage.DeleteWorkflow(finalName)
+				if err := storage.DeleteWorkflow(finalName); err != nil {
+					return fmt.Errorf("failed to overwrite existing workflow %q: %w", finalName, err)
+				}
 			} else {
 				fi, _ := os.Stdin.Stat()
 				if (fi.Mode() & os.ModeCharDevice) == 0 {
@@ -92,7 +96,7 @@ so that it can be tracked and run easily in the future.`,
 					if err != nil {
 						return fmt.Errorf("\naborted")
 					}
-					
+
 					inputName = strings.TrimSpace(inputName)
 					if inputName != "" {
 						if !nameExists(inputName) {
@@ -124,7 +128,9 @@ so that it can be tracked and run easily in the future.`,
 		updatedContent, err := yaml.Marshal(wf)
 		if err == nil {
 			flowPath := filepath.Join(storage.GetFlowsPath(), finalName+".yml")
-			os.WriteFile(flowPath, updatedContent, 0644)
+			if err := os.WriteFile(flowPath, updatedContent, 0644); err != nil {
+				return fmt.Errorf("failed to write workflow snapshot: %w", err)
+			}
 		}
 
 		fmt.Printf("Workflow %q successfully built and registered with ID: %s\n", metadata.Name, metadata.UID)

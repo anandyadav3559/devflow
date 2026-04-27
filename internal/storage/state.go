@@ -84,7 +84,10 @@ func SaveService(uid string, entry ActiveEntry) error {
 	stateMu.Lock()
 	defer stateMu.Unlock()
 
-	s, _ := loadStateUnlocked(uid)
+	s, err := loadStateUnlocked(uid)
+	if err != nil {
+		return err
+	}
 
 	s.Services[entry.ServiceName] = entry
 	// Maintain legacy map too
@@ -98,13 +101,18 @@ func RemovePID(uid string, serviceName string) error {
 	stateMu.Lock()
 	defer stateMu.Unlock()
 
-	s, _ := loadStateUnlocked(uid)
+	s, err := loadStateUnlocked(uid)
+	if err != nil {
+		return err
+	}
 	delete(s.DetachedPIDs, serviceName)
 	delete(s.Services, serviceName)
 
 	if len(s.Services) == 0 {
 		// Clean up the state file entirely when no services are left
-		os.Remove(getStateFile(uid))
+		if err := os.Remove(getStateFile(uid)); err != nil && !os.IsNotExist(err) {
+			return err
+		}
 		return nil
 	}
 	return writeState(uid, s)
@@ -163,7 +171,6 @@ func IsServiceNameActive(name string) (bool, ActiveEntry) {
 	return false, ActiveEntry{}
 }
 
-
 // GetWorkflowDaemonPID returns the daemon PID for a running workflow by name.
 // Returns 0 if not found or not running.
 func GetWorkflowDaemonPID(workflowName string) int {
@@ -195,7 +202,9 @@ func isProcessAlive(pid int) bool {
 }
 
 func writeState(uid string, s State) error {
-	os.MkdirAll(GetStoragePath(), 0755)
+	if err := os.MkdirAll(GetStoragePath(), 0755); err != nil {
+		return err
+	}
 	data, err := json.MarshalIndent(s, "", "  ")
 	if err != nil {
 		return err

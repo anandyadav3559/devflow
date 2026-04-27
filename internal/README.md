@@ -8,7 +8,7 @@ This package manages everything that DevFlow persists to disk. All files live un
 
 ```
 ~/.config/devflow/
-├── config.toml                  # User configuration (terminal preference, etc.)
+├── config.yml                   # User configuration (terminal preference, etc.)
 ├── devflow.pid                  # PID of the currently running daemon
 ├── flows/
 │   └── <name>.yml               # Snapshotted workflow files (from devflow build)

@@ -26,7 +26,9 @@ func StartDaemon(ctx context.Context, workflowName string, file string, targets 
 	logPath := internal.GetDaemonLogPath(workflowName, ts)
 
 	// Ensure logs dir exists
-	os.MkdirAll(internal.GetLogsPath(), 0755)
+	if err := os.MkdirAll(internal.GetLogsPath(), 0755); err != nil {
+		fmt.Fprintf(os.Stderr, "devflow daemon: cannot create logs dir: %v\n", err)
+	}
 
 	logF, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 	if err != nil {
@@ -38,7 +40,9 @@ func StartDaemon(ctx context.Context, workflowName string, file string, targets 
 
 	// Write PID file
 	pidPath := internal.GetDaemonPidPath(workflowName)
-	_ = os.WriteFile(pidPath, []byte(strconv.Itoa(os.Getpid())), 0644)
+	if err := os.WriteFile(pidPath, []byte(strconv.Itoa(os.Getpid())), 0644); err != nil {
+		fmt.Fprintf(os.Stderr, "devflow daemon: cannot write PID file: %v\n", err)
+	}
 
 	// Collect renames passed from the parent via env vars
 	renames := map[string]string{}
@@ -58,9 +62,6 @@ func StartDaemon(ctx context.Context, workflowName string, file string, targets 
 	os.Remove(pidPath)
 }
 
-
-
-
 // Start is the top-level entry point. It loads the workflow, resolves
 // dependency order, and launches each service. Then it waits for a termination signal to run cleanup.
 // renames maps original service name → new name (empty string = skip that service).
@@ -73,7 +74,6 @@ func Start(ctx context.Context, workflowName string, file string, renames map[st
 
 	// Override workflow name with the effective name (e.g. the alias)
 	wf.WorkflowName = workflowName
-
 
 	// Apply renames: rename keys in wf.Services, skip empty-value entries
 	if len(renames) > 0 {
@@ -239,7 +239,7 @@ func Start(ctx context.Context, workflowName string, file string, renames map[st
 
 	// Start IPC Server
 	sockPath := internal.GetDaemonSocketPath(workflowName)
-	StartIPCServer(ctx, sockPath, func(cmd string) string {
+	if err := StartIPCServer(ctx, sockPath, func(cmd string) string {
 		parts := strings.Fields(cmd)
 		if len(parts) == 0 {
 			return ""
@@ -251,7 +251,9 @@ func Start(ctx context.Context, workflowName string, file string, renames map[st
 			return "OK"
 		}
 		return "UNKNOWN_COMMAND"
-	})
+	}); err != nil {
+		fmt.Printf("warning: failed to start IPC server: %v\n", err)
+	}
 
 	// Initial spawn of everything
 	spawnGraph(initialTargets)

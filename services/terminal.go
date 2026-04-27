@@ -123,7 +123,7 @@ func keepOpenShell(cmd []string, dir string, vars map[string]string, logFile str
 	if logFile != "" {
 		startEcho := fmt.Sprintf(`echo "--- Start Time: $(date +%%Y-%%m-%%dT%%H:%%M:%%S%%z) ---" > %s; `, shellQuote(logFile))
 		endEcho := fmt.Sprintf(`; echo "--- End Time: $(date +%%Y-%%m-%%dT%%H:%%M:%%S%%z) ---" >> %s`, shellQuote(logFile))
-		
+
 		script = envPrefix + startEcho + "{ " + cmdStr + "; } 2>&1 | tee -a " + shellQuote(logFile) + endEcho +
 			`; echo; echo "--- process exited (press Enter to close) ---"; read`
 	} else {

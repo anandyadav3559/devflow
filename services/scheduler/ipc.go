@@ -12,17 +12,24 @@ import (
 // StartIPCServer listens on a Unix socket for incoming commands and passes them to the handler.
 func StartIPCServer(ctx context.Context, sockPath string, handler func(command string) string) error {
 	// Remove any existing socket file
-	os.Remove(sockPath)
+	if err := os.Remove(sockPath); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("failed to remove existing IPC socket: %w", err)
+	}
 
 	listener, err := net.Listen("unix", sockPath)
 	if err != nil {
 		return fmt.Errorf("failed to start IPC server: %w", err)
 	}
+	if err := os.Chmod(sockPath, 0600); err != nil {
+		listener.Close()
+		_ = os.Remove(sockPath)
+		return fmt.Errorf("failed to secure IPC socket permissions: %w", err)
+	}
 
 	go func() {
 		<-ctx.Done()
 		listener.Close()
-		os.Remove(sockPath)
+		_ = os.Remove(sockPath)
 	}()
 
 	go func() {
@@ -52,7 +59,7 @@ func handleIPCConnection(conn net.Conn, handler func(string) string) {
 			if !strings.HasSuffix(resp, "\n") {
 				resp += "\n"
 			}
-			conn.Write([]byte(resp))
+			_, _ = conn.Write([]byte(resp))
 		}
 	}
 }

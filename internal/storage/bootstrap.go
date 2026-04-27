@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 )
 
-func Bootstrap() {
+func Bootstrap() error {
 	dirs := []string{
 		GetBasePath(),
 		GetStoragePath(),
@@ -15,13 +15,16 @@ func Bootstrap() {
 
 	for _, dir := range dirs {
 		if err := os.MkdirAll(dir, 0755); err != nil {
-			panic(err)
+			return err
 		}
 	}
 
 	// create workflows.json
 	file := filepath.Join(GetStoragePath(), "workflows.json")
 	if _, err := os.Stat(file); os.IsNotExist(err) {
-		os.WriteFile(file, []byte("[]"), 0644)
+		if err := os.WriteFile(file, []byte("[]"), 0644); err != nil {
+			return err
+		}
 	}
+	return nil
 }

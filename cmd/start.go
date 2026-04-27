@@ -48,7 +48,9 @@ Use --no-daemon to keep it in the foreground.`,
 		}
 
 		// ensure dirs exist (lazy init)
-		storage.Bootstrap()
+		if err := storage.Bootstrap(); err != nil {
+			return fmt.Errorf("failed to initialize storage: %w", err)
+		}
 
 		var targetServices []string
 		targetService := ""
@@ -104,7 +106,6 @@ Use --no-daemon to keep it in the foreground.`,
 			scheduler.StartDaemon(ctx, effectiveName, workflowFile, targetServices)
 			return nil
 		}
-
 
 		// ── Pre-flight: check for name conflicts / already-running ─────────
 		// Common TTY check
@@ -175,9 +176,6 @@ Use --no-daemon to keep it in the foreground.`,
 			fmt.Printf("   Note: starting another instance might cause port conflicts.\n")
 		}
 
-
-
-
 		// 2. Check for already-running services
 		// We only care about conflicts WITHIN the same workflow name now.
 		// (User clarified: "multiple services can be of same name [across workflows]
@@ -236,7 +234,6 @@ Use --no-daemon to keep it in the foreground.`,
 			}
 		}
 
-
 		// ── No-daemon mode ────────────────────────────────────────────────
 		if noDaemon {
 			ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -245,11 +242,12 @@ Use --no-daemon to keep it in the foreground.`,
 			return nil
 		}
 
-
 		// ── Parent: self-fork into daemon ─────────────────────────────────
 		ts := time.Now().Format("20060102-150405")
 		logPath := storage.GetDaemonLogPath(effectiveName, ts)
-		os.MkdirAll(storage.GetLogsPath(), 0755)
+		if err := os.MkdirAll(storage.GetLogsPath(), 0755); err != nil {
+			return fmt.Errorf("failed to create logs directory: %w", err)
+		}
 
 		self, err := os.Executable()
 		if err != nil {
@@ -273,7 +271,6 @@ Use --no-daemon to keep it in the foreground.`,
 		for orig, newName := range renames {
 			childEnv = append(childEnv, envRenamePrefix+orig+"="+newName)
 		}
-
 
 		child := exec.Command(self, childArgs...)
 		child.Env = childEnv

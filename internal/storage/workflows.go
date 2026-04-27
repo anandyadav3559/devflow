@@ -6,11 +6,15 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 func GenerateUID() string {
 	b := make([]byte, 8)
-	rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		// Fall back to a time-derived value if crypto entropy is unavailable.
+		return fmt.Sprintf("%x", time.Now().UnixNano())
+	}
 	return fmt.Sprintf("%x", b)
 }
 
@@ -77,7 +81,9 @@ func DeleteWorkflow(name string) error {
 
 	// Delete the local copy snapshot
 	flowPath := filepath.Join(GetFlowsPath(), name+".yml")
-	os.Remove(flowPath) // Ignore errors (it may have been deleted manually)
+	if err := os.Remove(flowPath); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("failed removing workflow snapshot %q: %w", flowPath, err)
+	}
 
 	// Remove from list
 	wfs = append(wfs[:foundIndex], wfs[foundIndex+1:]...)
